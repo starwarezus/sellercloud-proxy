@@ -1,0 +1,26 @@
+RAILWAY PROXY SETUP GUIDE
+=========================
+
+FILES TO UPLOAD:
+1. index.js (the Node.js server code)
+2. package.json (dependencies)
+
+STEPS:
+1. Railway → New Project → Empty Project
+2. Click project → + New → Empty Service
+3. Upload index.js and package.json
+4. Railway auto-detects Node.js and deploys
+5. Settings → Networking → Generate Domain
+6. Copy your new URL (like: https://your-proxy.up.railway.app)
+
+ENVIRONMENT VARIABLES (Optional - defaults are in code):
+Settings → Variables → Add:
+- SC_USERNAME = henry@goldlabelny.com
+- SC_PASSWORD = Corishabt1987!!
+
+TEST IT:
+Open: https://your-proxy-url.up.railway.app
+Should see: {"status":"ok","message":"SellerCloud Proxy is running"}
+
+THEN:
+Update your scanner HTML with the new Railway URL in the SELLERCLOUD config

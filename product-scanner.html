@@ -1,0 +1,1853 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>Product Scanner</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <!-- OCR via API - no dependencies needed -->
+  <style>
+    :root {
+      --bg: #0a0a0f;
+      --surface: #13131a;
+      --surface2: #1c1c27;
+      --border: #2a2a3d;
+      --accent: #00e5a0;
+      --accent2: #7b61ff;
+      --warn: #ff6b35;
+      --text: #f0f0f8;
+      --text-dim: #7070a0;
+      --text-muted: #404060;
+      --radius: 16px;
+      --radius-sm: 8px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      min-height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      overflow-x: hidden;
+    }
+
+    /* Background grid */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(var(--border) 1px, transparent 1px),
+        linear-gradient(90deg, var(--border) 1px, transparent 1px);
+      background-size: 40px 40px;
+      opacity: 0.3;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .container {
+      position: relative;
+      z-index: 1;
+      max-width: 480px;
+      margin: 0 auto;
+      padding: 20px 16px 40px;
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    /* Header */
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 0;
+    }
+
+    .logo {
+      font-family: 'Playfair Display', serif;
+      font-weight: 800;
+      font-size: 1.4rem;
+      letter-spacing: -0.02em;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .status-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--text-muted);
+      box-shadow: 0 0 0 3px rgba(64,64,96,0.3);
+      transition: all 0.3s;
+    }
+    .status-dot.connected {
+      background: var(--accent);
+      box-shadow: 0 0 0 3px rgba(0,229,160,0.2), 0 0 12px rgba(0,229,160,0.4);
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { box-shadow: 0 0 0 3px rgba(0,229,160,0.2), 0 0 12px rgba(0,229,160,0.4); }
+      50% { box-shadow: 0 0 0 6px rgba(0,229,160,0.1), 0 0 20px rgba(0,229,160,0.6); }
+    }
+
+    /* Cards */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+      position: relative;
+      overflow: hidden;
+    }
+    .card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(123,97,255,0.5), transparent);
+    }
+
+    .card-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.65rem;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .card-label::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+
+    /* Sheet config */
+    .input-group {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .input-row {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .input-label {
+      font-size: 0.75rem;
+      color: var(--text-dim);
+      font-weight: 500;
+    }
+
+    input[type="text"] {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--text);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.8rem;
+      padding: 10px 14px;
+      width: 100%;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    input[type="text"]::placeholder { color: var(--text-muted); }
+    input[type="text"]:focus {
+      border-color: var(--accent2);
+      box-shadow: 0 0 0 3px rgba(123,97,255,0.15);
+    }
+
+    .connect-btn {
+      background: linear-gradient(135deg, var(--accent2), #5b41ff);
+      border: none;
+      border-radius: var(--radius-sm);
+      color: white;
+      cursor: pointer;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      font-size: 0.85rem;
+      font-weight: 500;
+      padding: 11px 20px;
+      transition: all 0.2s;
+      width: 100%;
+      letter-spacing: 0.02em;
+    }
+    .connect-btn:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(123,97,255,0.35); }
+    .connect-btn:active { transform: translateY(0); }
+
+    .help-text {
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+    .help-text a {
+      color: var(--accent2);
+      text-decoration: none;
+    }
+
+    /* Camera area */
+    .camera-wrapper {
+      position: relative;
+      border-radius: var(--radius);
+      overflow: hidden;
+      background: #000;
+      aspect-ratio: 4/3;
+      border: 1px solid var(--border);
+    }
+
+    video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    canvas { display: none; }
+
+    .camera-overlay {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      pointer-events: none;
+    }
+
+    .scan-frame {
+      width: 70%;
+      aspect-ratio: 3/1.2;
+      border: 2px solid var(--accent);
+      border-radius: 10px;
+      position: relative;
+      box-shadow: 0 0 0 9999px rgba(0,0,0,0.45);
+    }
+    .scan-frame::before, .scan-frame::after {
+      content: '';
+      position: absolute;
+      width: 18px; height: 18px;
+      border-color: white;
+      border-style: solid;
+    }
+    .scan-frame::before {
+      top: -2px; left: -2px;
+      border-width: 3px 0 0 3px;
+      border-radius: 4px 0 0 0;
+    }
+    .scan-frame::after {
+      bottom: -2px; right: -2px;
+      border-width: 0 3px 3px 0;
+      border-radius: 0 0 4px 0;
+    }
+
+    .scan-line {
+      position: absolute;
+      left: 0; right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, var(--accent), transparent);
+      animation: scanline 2s ease-in-out infinite;
+      box-shadow: 0 0 10px var(--accent);
+    }
+    @keyframes scanline {
+      0% { top: 10%; }
+      50% { top: 85%; }
+      100% { top: 10%; }
+    }
+
+    .camera-placeholder {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      color: var(--text-muted);
+    }
+    .camera-placeholder svg {
+      opacity: 0.4;
+    }
+    .camera-placeholder p {
+      font-size: 0.8rem;
+      text-align: center;
+      max-width: 180px;
+      line-height: 1.5;
+    }
+
+    /* Buttons */
+    .btn-row {
+      display: flex;
+      gap: 10px;
+    }
+
+    .btn {
+      flex: 1;
+      border: none;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      font-weight: 500;
+      font-size: 0.85rem;
+      padding: 13px 16px;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      letter-spacing: 0.01em;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, var(--accent), #00c080);
+      color: #0a0a0f;
+    }
+    .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(0,229,160,0.3); }
+    .btn-primary:disabled { opacity: 0.4; transform: none; cursor: not-allowed; }
+
+    .btn-secondary {
+      background: var(--surface2);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+    .btn-secondary:hover { border-color: var(--text-dim); background: var(--surface); }
+
+    .btn-upload {
+      background: var(--surface2);
+      color: var(--text-dim);
+      border: 1px dashed var(--border);
+      width: 100%;
+    }
+    .btn-upload:hover { border-color: var(--accent2); color: var(--text); }
+
+    /* Processing state */
+    .processing-badge {
+      display: none;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 16px;
+      background: rgba(123,97,255,0.1);
+      border: 1px solid rgba(123,97,255,0.3);
+      border-radius: var(--radius-sm);
+      font-size: 0.82rem;
+      color: var(--accent2);
+    }
+    .processing-badge.active { display: flex; }
+
+    .spinner {
+      width: 16px; height: 16px;
+      border: 2px solid rgba(123,97,255,0.3);
+      border-top-color: var(--accent2);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Results */
+    .result-card {
+      display: none;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .result-card.visible { display: flex; }
+
+    .result-status {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 16px;
+      border-radius: var(--radius-sm);
+      font-size: 0.85rem;
+      font-weight: 500;
+    }
+    .result-status.found {
+      background: rgba(0,229,160,0.1);
+      border: 1px solid rgba(0,229,160,0.3);
+      color: var(--accent);
+    }
+    .result-status.not-found {
+      background: rgba(255,107,53,0.1);
+      border: 1px solid rgba(255,107,53,0.3);
+      color: var(--warn);
+    }
+
+    .scanned-text-box {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 12px 14px;
+    }
+    .scanned-text-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.65rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+    }
+    .scanned-text-value {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.88rem;
+      color: var(--text);
+      line-height: 1.4;
+    }
+
+    .match-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .match-row {
+      display: flex;
+      gap: 10px;
+      padding: 10px 14px;
+      background: var(--surface2);
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border);
+      align-items: flex-start;
+    }
+    .match-key {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.7rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      min-width: 90px;
+      padding-top: 1px;
+    }
+    .match-val {
+      font-size: 0.85rem;
+      color: var(--text);
+      flex: 1;
+      word-break: break-word;
+    }
+    .match-val.highlight {
+      color: var(--accent);
+      font-weight: 500;
+    }
+
+    /* OCR text editor */
+    .ocr-edit-box {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 12px 14px;
+    }
+    .ocr-edit-box label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.65rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      display: block;
+      margin-bottom: 8px;
+    }
+    .ocr-edit-row {
+      display: flex;
+      gap: 8px;
+    }
+    .ocr-edit-row input {
+      flex: 1;
+    }
+    .btn-search-manual {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--text-dim);
+      cursor: pointer;
+      font-size: 0.78rem;
+      padding: 10px 14px;
+      transition: all 0.2s;
+      white-space: nowrap;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+    .btn-search-manual:hover { border-color: var(--accent); color: var(--accent); }
+
+    /* History */
+    .history-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .history-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 14px;
+      background: var(--surface2);
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border);
+      cursor: pointer;
+      transition: border-color 0.2s;
+    }
+    .history-item:hover { border-color: var(--text-muted); }
+    .history-dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .history-dot.found { background: var(--accent); }
+    .history-dot.not-found { background: var(--warn); }
+    .history-text {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.78rem;
+      color: var(--text-dim);
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .history-time {
+      font-size: 0.7rem;
+      color: var(--text-muted);
+    }
+
+    .empty-state {
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 0.8rem;
+      padding: 20px 0;
+      line-height: 1.6;
+    }
+
+    /* Collapsible */
+    .collapsible-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+      user-select: none;
+    }
+    .collapsible-header .chevron {
+      transition: transform 0.2s;
+      color: var(--text-muted);
+    }
+    .collapsible-header.open .chevron { transform: rotate(180deg); }
+    .collapsible-body {
+      overflow: hidden;
+      max-height: 0;
+      transition: max-height 0.3s ease;
+    }
+    .collapsible-body.open { max-height: 600px; }
+    .collapsible-inner { padding-top: 16px; }
+
+    /* Toast */
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%) translateY(80px);
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 100px;
+      padding: 10px 20px;
+      font-size: 0.82rem;
+      color: var(--text);
+      z-index: 999;
+      transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+      white-space: nowrap;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+    }
+    .toast.show { transform: translateX(-50%) translateY(0); }
+
+    /* Image preview */
+    .captured-img {
+      width: 100%;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border);
+      display: none;
+    }
+    .captured-img.visible { display: block; }
+
+    input[type="file"] { display: none; }
+
+    /* Word checkbox list */
+    .word-checkbox-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px;
+      margin: 4px 0;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .word-checkbox-item:hover {
+      border-color: var(--accent2);
+      background: var(--surface2);
+    }
+    .word-checkbox-item input[type="checkbox"] {
+      width: 18px;
+      height: 18px;
+      cursor: pointer;
+      accent-color: var(--accent);
+    }
+    .word-text {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.88rem;
+      color: var(--text);
+      flex: 1;
+    }
+    .word-text.is-code {
+      color: var(--accent);
+      font-weight: 600;
+    }
+  </style>
+  </head>
+<body>
+<div class="container">
+
+  <!-- Header -->
+  <header>
+    <div class="logo">ScanMatch</div>
+    <div class="status-dot" id="statusDot"></div>
+  </header>
+
+  <!-- Step 1: Google Sheets Setup -->
+  <div class="card">
+    <div class="collapsible-header" id="setupToggle">
+      <div class="card-label" style="margin-bottom:0; flex:1">01 — SellerCloud Connection</div>
+      <svg class="chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+    </div>
+    <div class="collapsible-body open" id="setupBody">
+      <div class="collapsible-inner">
+        <div class="input-group">
+          <div class="input-row">
+            <div class="input-label">Data Source</div>
+            <select id="dataSource" onchange="switchDataSource()" style="padding:10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:0.9rem;width:100%">
+              <option value="sellercloud">SellerCloud API</option>
+              <option value="googlesheets">Google Sheets</option>
+            </select>
+          </div>
+
+          <!-- SellerCloud Info (shown when SellerCloud selected) -->
+          <div id="sellercloudInfo" style="margin-top:16px;padding:16px;background:rgba(0,229,160,0.08);border:1px solid rgba(0,229,160,0.25);border-radius:10px">
+            <div style="font-weight:600;color:var(--accent);margin-bottom:6px">✓ SellerCloud Connected</div>
+            <div style="font-size:0.78rem;color:var(--text-dim);line-height:1.5;margin-bottom:12px">
+              Endpoint: blny.api.sellercloud.com<br>
+              Token: Auto-managed (refreshes hourly)<br>
+              Search field: Manufacturer SKU
+            </div>
+            <button class="connect-btn" onclick="testSellerCloudConnection()" style="font-size:0.82rem;padding:10px 16px">Test API Connection</button>
+            <div id="scTestResult" style="margin-top:10px;font-size:0.75rem;display:none"></div>
+          </div>
+
+          <!-- Google Sheets Config (shown when Google Sheets selected) -->
+          <div id="googlesheetsConfig" style="margin-top:16px;display:none">
+            <div class="input-row">
+              <div class="input-label">Spreadsheet ID</div>
+              <input type="text" id="sheetId" placeholder="1B06wtCaglwTVbR1_gHpzaLZdngh-tziq0nHwJBsgidM" />
+            </div>
+            <div class="input-row">
+              <div class="input-label">Sheet Range</div>
+              <input type="text" id="sheetRange" placeholder="Sheet1!A:Z" value="Sheet1!A:Z" />
+            </div>
+            <div class="input-row">
+              <div class="input-label">Match Column (letter)</div>
+              <input type="text" id="matchCol" placeholder="A" value="A" maxlength="2" />
+            </div>
+            <div class="input-row">
+              <div class="input-label">API Key</div>
+              <input type="text" id="apiKey" placeholder="AIzaSyCTpRFveYpDvwAJvSyWk1mbMAkROw_vtBM" />
+            </div>
+            <button class="connect-btn" onclick="testGoogleSheets()">Test Connection</button>
+          </div>
+
+          <div class="input-row" style="margin-top:16px">
+            <div class="input-label">SKU Prefix Filter <span style="color:var(--text-muted)">(optional)</span></div>
+            <input type="text" id="skuPrefix" placeholder="e.g. SNZU,PAMA,GIMA" />
+          </div>
+          <div class="help-text">
+            <strong style="color:var(--accent)">✓ Connected to SellerCloud</strong><br>
+            Token auto-refreshes every hour. All product data pulled from SellerCloud API.
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step 2: Camera Scanner -->
+  <div class="card">
+    <div class="card-label">02 — Camera Scanner</div>
+    <div class="camera-wrapper" id="cameraWrapper">
+      <div class="camera-placeholder" id="cameraPlaceholder">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+          <circle cx="12" cy="13" r="4"/>
+        </svg>
+        <p>Tap "Start Camera" to begin scanning labels</p>
+      </div>
+      <video id="video" autoplay playsinline muted></video>
+      <div class="camera-overlay" id="cameraOverlay" style="display:none">
+        <div class="scan-frame">
+          <div class="scan-line"></div>
+        </div>
+      </div>
+    </div>
+    <canvas id="canvas"></canvas>
+
+    <div style="margin-top:12px; display:flex; flex-direction:column; gap:10px;">
+      <div class="btn-row">
+        <button class="btn btn-secondary" id="startCamBtn" onclick="startCamera()">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8" fill="currentColor"/></svg>
+          Start Camera
+        </button>
+        <button class="btn btn-primary" id="captureBtn" onclick="captureAndScan()" disabled>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          Scan Label
+        </button>
+      </div>
+      <label for="fileInput">
+        <div class="btn btn-upload" onclick="document.getElementById('fileInput').click()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg>
+          Upload image instead
+        </div>
+      </label>
+      <input type="file" id="fileInput" accept="image/*" onchange="uploadImage(event)" />
+    </div>
+  </div>
+
+  <!-- Processing indicator -->
+  <div class="processing-badge" id="processingBadge">
+    <div class="spinner"></div>
+    <span id="processingText">Reading label text...</span>
+  </div>
+
+  <!-- Captured image preview -->
+  <img id="capturedImg" class="captured-img" alt="Captured" />
+
+  <!-- Text Selection UI - Simple Checkbox List -->
+  <div class="card" id="textSelectionUI" style="display:none">
+    <div class="card-label">Select Text to Search</div>
+    
+    <div style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap">
+      <button onclick="selectAllCodes()" style="font-size:0.75rem;padding:6px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text-dim);cursor:pointer">Select Codes Only</button>
+      <button onclick="clearSelection()" style="font-size:0.75rem;padding:6px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text-dim);cursor:pointer">Clear All</button>
+    </div>
+    
+    <div id="wordCheckboxList" style="max-height:300px;overflow-y:auto;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px"></div>
+    
+    <div style="margin-top:12px;padding:12px;background:var(--surface2);border-radius:8px;font-size:0.82rem;line-height:1.6" id="selectionSummary">
+      <span style="color:var(--text-muted)">Select at least one item</span>
+    </div>
+    
+    <button class="btn btn-primary" onclick="searchSelected()" style="margin-top:12px;width:100%">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      Search Selected
+    </button>
+  </div>
+
+  <!-- OCR Result + manual edit -->
+  <div class="card" id="ocrEditCard" style="display:none">
+    <div class="card-label">Detected Text</div>
+    <div class="ocr-edit-box">
+      <label>Edit if needed, then search</label>
+      <div class="ocr-edit-row">
+        <input type="text" id="ocrEditInput" placeholder="Scanned text..." />
+        <button class="btn-search-manual" onclick="searchSheet(document.getElementById('ocrEditInput').value)">Search →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Results -->
+  <div class="card result-card" id="resultCard">
+    <div class="card-label">03 — Match Result</div>
+
+    <div id="resultStatus" class="result-status"></div>
+
+    <div id="matchGrid" class="match-grid"></div>
+  </div>
+
+  <!-- Scan History -->
+  <div class="card">
+    <div class="collapsible-header" id="historyToggle">
+      <div class="card-label" style="margin-bottom:0; flex:1">Scan History</div>
+      <svg class="chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+    </div>
+    <div class="collapsible-body" id="historyBody">
+      <div class="collapsible-inner">
+        <div class="history-list" id="historyList">
+          <div class="empty-state">No scans yet.<br>Start by scanning a product label.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+  // ── Config ──────────────────────────────────────────────
+  // ── Hardcoded defaults ───────────────────────────────────
+  const DEFAULTS = {
+    sheetId:    '1B06wtCaglwTVbR1_gHpzaLZdngh-tziq0nHwJBsgidM',
+    apiKey:     'AIzaSyCTpRFveYpDvwAJvSyWk1mbMAkROw_vtBM',
+    sheetRange: 'Sheet1!A:Z',
+    matchCol:   'A',
+    skuPrefix:  ''
+  };
+
+  // ── Data Source Configuration  let dataSource = 'sellercloud'; // 'sellercloud' or 'googlesheets'
+
+  // ── SellerCloud Configuration (via Railway Proxy) ────────
+  // Using Railway proxy to avoid CORS issues
+  const SELLERCLOUD = {
+    proxyUrl: 'https://marvelous-flow-production.up.railway.app'
+  };
+
+  let config = {
+    // Google Sheets config
+    sheetId: '1B06wtCaglwTVbR1_gHpzaLZdngh-tziq0nHwJBsgidM',
+    apiKey: 'AIzaSyCTpRFveYpDvwAJvSyWk1mbMAkROw_vtBM',
+    sheetRange: 'Sheet1!A:Z',
+    matchCol: 'A',
+    skuPrefix: ''
+  };
+
+    let stream = null;
+  let scanHistory = [];
+  let headers = [];
+
+  // Load saved config — saved values override defaults
+  (function loadSaved() {
+    const saved = localStorage.getItem('scanmatch_config');
+    if (saved) {
+      // SellerCloud always connected
+    }
+    // Always populate fields from config (defaults or saved)
+    document.getElementById('sheetId').value    = config.sheetId;
+    document.getElementById('sheetRange').value = config.sheetRange;
+    document.getElementById('matchCol').value   = config.matchCol;
+    document.getElementById('apiKey').value     = config.apiKey;
+    document.getElementById('skuPrefix').value  = config.skuPrefix;
+
+    // Pre-filled credentials — mark connected and collapse setup
+    if (config.sheetId && config.apiKey) {
+      document.getElementById('statusDot').classList.add('connected');
+      setTimeout(collapseSetup, 80);
+    }
+
+    const hist = localStorage.getItem('scanmatch_history');
+    if (hist) {
+      scanHistory = JSON.parse(hist);
+      renderHistory();
+    }
+  })();
+
+  // ── Collapsible ─────────────────────────────────────────
+  function collapseSetup() {
+    const body = document.getElementById('setupBody');
+    const hdr = document.getElementById('setupToggle');
+    body.classList.remove('open');
+    hdr.classList.remove('open');
+  }
+
+  document.getElementById('setupToggle').addEventListener('click', function() {
+    const body = document.getElementById('setupBody');
+    body.classList.toggle('open');
+    this.classList.toggle('open');
+  });
+
+  document.getElementById('historyToggle').addEventListener('click', function() {
+    const body = document.getElementById('historyBody');
+    body.classList.toggle('open');
+    this.classList.toggle('open');
+  });
+
+  // ── Config Save ─────────────────────────────────────────
+
+  async function testSellerCloudConnection() {
+    const resultDiv = document.getElementById('scTestResult');
+    resultDiv.style.display = 'block';
+    resultDiv.innerHTML = '<span style="color:var(--text-dim)">Testing connection...</span>';
+    
+    try {
+      console.log('🧪 Testing SellerCloud via Railway proxy...');
+      
+      const testUrl = `${SELLERCLOUD.proxyUrl}/api/test`;
+      console.log('📡 Calling:', testUrl);
+      
+      const response = await fetch(testUrl, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json'
+        }
+      });
+      
+      console.log('📥 Response status:', response.status);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Proxy returned ${response.status}: ${errorText}`);
+      }
+      
+      const data = await response.json();
+      console.log('📦 Response data:', data);
+      
+      if (data.success) {
+        resultDiv.innerHTML = `<span style="color:var(--accent)">✓ Connection successful!</span><br><span style="color:var(--text-dim);font-size:0.7rem">Found ${data.totalProducts} products. Railway proxy is working!</span>`;
+        showToast('SellerCloud connected via Railway!');
+      } else {
+        throw new Error(data.error || 'Unknown error');
+      }
+      
+    } catch (e) {
+      console.error('❌ Railway proxy test failed:', e);
+      const errorMsg = e.message || 'Unknown error';
+      resultDiv.innerHTML = `<span style="color:var(--warn)">✗ Connection failed</span><br><span style="color:var(--text-dim);font-size:0.7rem;word-break:break-word">${errorMsg}</span>`;
+      showToast('Railway proxy connection failed');
+    }
+  }
+
+  function switchDataSource() {
+    dataSource = document.getElementById('dataSource').value;
+    
+    // Show/hide relevant config sections
+    if (dataSource === 'sellercloud') {
+      document.getElementById('sellercloudInfo').style.display = 'block';
+      document.getElementById('googlesheetsConfig').style.display = 'none';
+      document.getElementById('statusDot').classList.add('connected');
+    } else {
+      document.getElementById('sellercloudInfo').style.display = 'none';
+      document.getElementById('googlesheetsConfig').style.display = 'block';
+      
+      // Check if Google Sheets is configured
+      if (config.sheetId && config.apiKey) {
+        document.getElementById('statusDot').classList.add('connected');
+      } else {
+        document.getElementById('statusDot').classList.remove('connected');
+      }
+    }
+    
+    localStorage.setItem('scanmatch_datasource', dataSource);
+    showToast(`Switched to ${dataSource === 'sellercloud' ? 'SellerCloud' : 'Google Sheets'}`);
+  }
+
+  async function testGoogleSheets() {
+    config.sheetId = document.getElementById('sheetId').value.trim();
+    config.apiKey = document.getElementById('apiKey').value.trim();
+    config.sheetRange = document.getElementById('sheetRange').value.trim() || 'Sheet1!A:Z';
+    config.matchCol = document.getElementById('matchCol').value.trim().toUpperCase() || 'A';
+
+    if (!config.sheetId || !config.apiKey) {
+      showToast('Please enter Sheet ID and API Key');
+      return;
+    }
+
+    showProcessing('Testing Google Sheets...');
+    try {
+      const url = `https://sheets.googleapis.com/v4/spreadsheets/${config.sheetId}/values/${encodeURIComponent(config.sheetRange)}?key=${config.apiKey}`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error('Connection failed');
+      const data = await res.json();
+      
+      localStorage.setItem('scanmatch_config', JSON.stringify(config));
+      document.getElementById('statusDot').classList.add('connected');
+      hideProcessing();
+      showToast(`✓ Connected — ${data.values ? data.values.length - 1 : 0} rows found`);
+      collapseSetup();
+    } catch (e) {
+      hideProcessing();
+      document.getElementById('statusDot').classList.remove('connected');
+      showToast('Connection failed — check credentials');
+    }
+  }
+
+  // SellerCloud is always connected - no manual config needed
+
+  async function saveConfig() {
+    // Not used - SellerCloud connection is automatic
+  }
+
+  async function fetchSheet() {
+    // Not used - replaced by SellerCloud API
+  }
+
+  // ── Camera ───────────────────────────────────────────────
+  async function startCamera() {
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 960 } }
+      });
+      const video = document.getElementById('video');
+      video.srcObject = stream;
+      video.style.display = 'block';
+      document.getElementById('cameraPlaceholder').style.display = 'none';
+      document.getElementById('cameraOverlay').style.display = 'flex';
+      document.getElementById('captureBtn').disabled = false;
+      document.getElementById('startCamBtn').textContent = 'Stop Camera';
+      document.getElementById('startCamBtn').onclick = stopCamera;
+    } catch (e) {
+      showToast('Camera access denied — try uploading an image');
+    }
+  }
+
+  function stopCamera() {
+    if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+    const video = document.getElementById('video');
+    video.srcObject = null;
+    video.style.display = 'none';
+    document.getElementById('cameraPlaceholder').style.display = 'flex';
+    document.getElementById('cameraOverlay').style.display = 'none';
+    document.getElementById('captureBtn').disabled = true;
+    document.getElementById('startCamBtn').textContent = 'Start Camera';
+    document.getElementById('startCamBtn').onclick = startCamera;
+  }
+
+  async function captureAndScan() {
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('canvas');
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    canvas.getContext('2d').drawImage(video, 0, 0);
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+
+    const img = document.getElementById('capturedImg');
+    img.src = dataUrl;
+    img.classList.add('visible');
+
+    await runOCR(dataUrl);
+  }
+
+  async function uploadImage(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      const dataUrl = e.target.result;
+      const img = document.getElementById('capturedImg');
+      img.src = dataUrl;
+      img.classList.add('visible');
+      await runOCR(dataUrl);
+    };
+    reader.readAsDataURL(file);
+  }
+
+  // ── SellerCloud Token Management ─────────────────────────
+  async function getSellerCloudToken() {
+    // Check if we have a valid token
+    if (SELLERCLOUD.token && SELLERCLOUD.tokenExpiry) {
+      const now = Date.now();
+      const timeLeft = SELLERCLOUD.tokenExpiry - now;
+      // If more than 5 minutes left, use existing token
+      if (timeLeft > 5 * 60 * 1000) {
+        console.log('Using existing SellerCloud token');
+        return SELLERCLOUD.token;
+      }
+    }
+
+    // Generate new token
+    console.log('Generating new SellerCloud token...');
+    try {
+      const response = await fetch(`${SELLERCLOUD.baseUrl}/token`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({
+          Username: SELLERCLOUD.username,
+          Password: SELLERCLOUD.password
+        })
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Token error response:', errorText);
+        throw new Error(`Token request failed: ${response.status} - ${errorText.substring(0, 100)}`);
+      }
+
+      const data = await response.json();
+      console.log('Token response:', data);
+      
+      if (!data.access_token) {
+        throw new Error('No access_token in response: ' + JSON.stringify(data));
+      }
+
+      // Store token and expiry (1 hour from now)
+      SELLERCLOUD.token = data.access_token;
+      SELLERCLOUD.tokenExpiry = Date.now() + (55 * 60 * 1000); // 55 minutes
+      
+      console.log('SellerCloud token generated successfully');
+      return SELLERCLOUD.token;
+
+    } catch (e) {
+      console.error('Failed to get SellerCloud token:', e);
+      showToast('SellerCloud authentication failed');
+      throw e;
+    }
+  }
+
+    // ── OCR with Simple Checkbox Selection ──────────────────
+  let detectedWords = []; // stores detected text items
+
+  async function runOCR(imageData) {
+    showProcessing('Reading label text...');
+    document.getElementById('ocrEditCard').style.display = 'none';
+    document.getElementById('resultCard').classList.remove('visible');
+    document.getElementById('textSelectionUI').style.display = 'none';
+    detectedWords = [];
+
+    try {
+      // Convert data URL to blob
+      const blob = await fetch(imageData).then(r => r.blob());
+      
+      // Create form data
+      const formData = new FormData();
+      formData.append('file', blob, 'image.jpg');
+      formData.append('apikey', 'helloworld'); // Free tier API key
+      formData.append('language', 'eng');
+      formData.append('isOverlayRequired', 'false');
+      formData.append('detectOrientation', 'true');
+      formData.append('scale', 'true');
+      formData.append('OCREngine', '2');
+      
+      showProcessing('Uploading image...');
+      
+      // Call OCR.space API
+      const response = await fetch('https://api.ocr.space/parse/image', {
+        method: 'POST',
+        body: formData
+      });
+      
+      const result = await response.json();
+      
+      hideProcessing();
+      
+      console.log('OCR result:', result);
+      
+      if (!result.ParsedResults || result.ParsedResults.length === 0) {
+        showToast('No text detected — try a clearer image');
+        return;
+      }
+      
+      const parsedText = result.ParsedResults[0].ParsedText;
+      
+      if (!parsedText || parsedText.trim().length === 0) {
+        showToast('No text detected — try a clearer image');
+        return;
+      }
+      
+      console.log('Parsed text:', parsedText);
+      
+      // Extract words
+      const words = parsedText.split(/\s+/);
+      
+      // Clean and filter
+      detectedWords = words
+        .map(w => w.replace(/[^A-Z0-9]/gi, '').toUpperCase())
+        .filter(w => w.length >= 2);
+      
+      // Deduplicate
+      detectedWords = [...new Set(detectedWords)];
+      
+      console.log('Detected words:', detectedWords);
+
+      if (detectedWords.length === 0) {
+        showToast('No text detected — try a clearer image');
+        return;
+      }
+      
+            // Hide captured image to save space
+      document.getElementById('capturedImg').classList.remove('visible');
+      
+showTextSelectionList();
+
+    } catch (e) {
+      hideProcessing();
+      showToast('OCR failed: ' + (e.message || 'Network error'));
+      console.error('OCR error:', e);
+    }
+  }
+
+    let selectionOrder = []; // Track order of selection
+
+  function showTextSelectionList() {
+    const ui = document.getElementById('textSelectionUI');
+    const list = document.getElementById('wordCheckboxList');
+    
+    ui.style.display = 'block';
+    list.innerHTML = '';
+    selectionOrder = []; // Reset order
+    
+    // Sort: codes (letters+numbers) first, then rest
+    const sorted = detectedWords.sort((a, b) => {
+      const aIsCode = /[A-Z]/.test(a) && /[0-9]/.test(a);
+      const bIsCode = /[A-Z]/.test(b) && /[0-9]/.test(b);
+      if (aIsCode && !bIsCode) return -1;
+      if (!aIsCode && bIsCode) return 1;
+      return a.localeCompare(b);
+    });
+    
+    sorted.forEach((word, idx) => {
+      const isCode = /[A-Z]/.test(word) && /[0-9]/.test(word) && word.length >= 4;
+      
+      const item = document.createElement('label');
+      item.className = 'word-checkbox-item';
+      item.innerHTML = `
+        <input type="checkbox" id="word_${idx}" value="${escHtml(word)}" ${isCode ? 'checked' : ''} onchange="handleCheckboxChange(this)">
+        <span class="word-text ${isCode ? 'is-code' : ''}">${escHtml(word)}</span>
+        <span class="order-badge" id="badge_${idx}" style="display:none;margin-left:auto;background:var(--accent);color:#000;font-size:0.7rem;padding:2px 6px;border-radius:4px;font-weight:700"></span>
+      `;
+      list.appendChild(item);
+    });
+    
+    // Pre-populate order for auto-checked codes
+    document.querySelectorAll('#wordCheckboxList input[type="checkbox"]:checked').forEach(cb => {
+      selectionOrder.push(cb.value);
+    });
+    
+    updateSelectionCount();
+  }
+  
+  function handleCheckboxChange(checkbox) {
+    const value = checkbox.value;
+    const badge = document.getElementById('badge_' + checkbox.id.split('_')[1]);
+    
+    if (checkbox.checked) {
+      // Add to order if not already there
+      if (!selectionOrder.includes(value)) {
+        selectionOrder.push(value);
+      }
+      // Show order number
+      const orderNum = selectionOrder.indexOf(value) + 1;
+      badge.textContent = orderNum;
+      badge.style.display = 'inline-block';
+    } else {
+      // Remove from order
+      const idx = selectionOrder.indexOf(value);
+      if (idx > -1) {
+        selectionOrder.splice(idx, 1);
+      }
+      badge.style.display = 'none';
+      
+      // Update all other badges
+      document.querySelectorAll('#wordCheckboxList input[type="checkbox"]:checked').forEach(cb => {
+        const cbValue = cb.value;
+        const cbBadge = document.getElementById('badge_' + cb.id.split('_')[1]);
+        const orderNum = selectionOrder.indexOf(cbValue) + 1;
+        cbBadge.textContent = orderNum;
+      });
+    }
+    
+    updateSelectionCount();
+  }
+
+    function updateSelectionCount() {
+    const summary = document.getElementById('selectionSummary');
+    
+    if (selectionOrder.length === 0) {
+      summary.innerHTML = '<span style="color:var(--text-muted)">Select at least one item</span>';
+    } else {
+      const words = selectionOrder.join(' + ');
+      summary.innerHTML = `<span style="color:var(--accent);font-weight:600">${selectionOrder.length} selected:</span> <span style="font-family:monospace;font-size:0.8rem">${words}</span>`;
+    }
+  }
+
+  function searchSelected() {
+    console.log('=== searchSelected called ===');
+    console.log('selectionOrder:', selectionOrder);
+    
+    if (selectionOrder.length === 0) {
+      console.log('ERROR: No items selected');
+      showToast('Please select at least one text item');
+      return;
+    }
+    
+    console.log('Config:', { sheetId: config.sheetId, apiKey: config.apiKey ? 'SET' : 'NOT SET' });
+    
+    // SellerCloud is always available - no config check needed
+    
+    const searchText = selectionOrder.join('_');
+    
+    console.log('Search text:', searchText);
+    console.log('Normalized:', searchText.toUpperCase().replace(/[^A-Z0-9]/g, ''));
+    
+    document.getElementById('textSelectionUI').style.display = 'none';
+    document.getElementById('ocrEditInput').value = searchText;
+    document.getElementById('ocrEditCard').style.display = 'block';
+    
+    console.log('Calling searchSheet...');
+    searchSheet(searchText);
+  }
+
+
+  function clearSelection() {
+    const checkboxes = document.querySelectorAll('#wordCheckboxList input[type="checkbox"]');
+    checkboxes.forEach(cb => cb.checked = false);
+    selectionOrder = [];
+    document.querySelectorAll('.order-badge').forEach(b => b.style.display = 'none');
+    updateSelectionCount();
+  }
+  
+  function selectAllCodes() {
+    selectionOrder = [];
+    const checkboxes = document.querySelectorAll('#wordCheckboxList input[type="checkbox"]');
+    checkboxes.forEach(cb => {
+      const word = cb.value;
+      const isCode = /[A-Z]/.test(word) && /[0-9]/.test(word) && word.length >= 4;
+      cb.checked = isCode;
+      if (isCode) {
+        selectionOrder.push(word);
+        const badge = document.getElementById('badge_' + cb.id.split('_')[1]);
+        const orderNum = selectionOrder.indexOf(word) + 1;
+        badge.textContent = orderNum;
+        badge.style.display = 'inline-block';
+      } else {
+        const badge = document.getElementById('badge_' + cb.id.split('_')[1]);
+        badge.style.display = 'none';
+      }
+    });
+    updateSelectionCount();
+  }
+
+
+    // ── SKU Extraction ───────────────────────────────────────
+  function extractSKU(rawText) {
+    const prefixes = config.skuPrefix
+      ? config.skuPrefix.split(',').map(p => p.trim().toUpperCase()).filter(Boolean)
+      : [];
+
+    const NOISE_WORDS = new Set([
+      'SIZE','COLOR','COL','USD','EUR','GBP','NAVY','LIGHT','DARK','BLUE','RED',
+      'GREEN','BLACK','WHITE','SATIN','CREPE','JACKET','SNEAKERS','PANTALONE',
+      'ENVERS','PABLO','YEAR','DATE','STYLE','TYPE','CODE','ITEM','REF','ARTICLE',
+      'BIEN','NAVY','SATIN','BLIGH','SOTA','TEREST','RAIMON'
+    ]);
+
+    // Normalize OCR common misreads: 0↔O, 1↔I, 5↔S, 8↔B, Q→O (common OCR error)
+    function normOCR(s) {
+      return s
+        .replace(/Q/g,'O')   // Q is very commonly misread as O
+        .replace(/0/g,'O')
+        .replace(/1/g,'I')
+        .replace(/5/g,'S')
+        .replace(/8/g,'B')
+        .replace(/6/g,'G');
+    }
+
+    // Tokenize — split on whitespace, keep alphanumeric only, min 4 chars
+    const tokens = rawText
+      .split(/[\s\n\r\t,.'"\-–|/\\()\[\]{}]+/)
+      .map(t => t.replace(/[^A-Z0-9]/gi, '').toUpperCase())
+      .filter(t => t.length >= 4 && t.length <= 16);
+
+    // A valid product code: has BOTH letters and digits, not a noise word,
+    // not purely numeric (price, size, year, barcode)
+    function isCode(token) {
+      if (NOISE_WORDS.has(token)) return false;
+      if (!/[A-Z]/i.test(token)) return false;
+      if (!/[0-9]/.test(token)) return false;
+      if (/^\d+$/.test(token)) return false;
+      // Reject long barcode-style pure numbers
+      if (/^[0-9]{6,}$/.test(token)) return false;
+      // Reject tokens that are only 1 letter + rest digits if that letter is common word char
+      // but KEEP things like P2722, A0, TV285 etc (these are valid codes)
+      return true;
+    }
+
+    // Fuzzy prefix match — normalize both sides before comparing
+    function prefixMatch(token, prefix) {
+      const normTok = normOCR(token);
+      const normPfx = normOCR(prefix);
+      // Check if first N chars of token match prefix after normalization
+      return normTok.startsWith(normPfx) || normTok.substring(0, normPfx.length) === normPfx;
+    }
+
+    // Score how "code-like" a token is (higher = more likely a product code)
+    function codeScore(token) {
+      let score = 0;
+      const letters = (token.match(/[A-Z]/g) || []).length;
+      const digits  = (token.match(/[0-9]/g) || []).length;
+      // Good mix of letters and digits
+      if (letters >= 2 && digits >= 2) score += 3;
+      else if (letters >= 1 && digits >= 3) score += 2;
+      // Typical code lengths
+      if (token.length >= 5 && token.length <= 10) score += 2;
+      // Starts with letters (common pattern)
+      if (/^[A-Z]{2,}/.test(token)) score += 1;
+      return score;
+    }
+
+    let result = [];
+
+    if (prefixes.length > 0) {
+      // Find primary token matching a prefix (fuzzy)
+      let primary = null;
+      for (const token of tokens) {
+        for (const prefix of prefixes) {
+          if (prefixMatch(token, prefix)) {
+            primary = token;
+            break;
+          }
+        }
+        if (primary) break;
+      }
+
+      if (primary) {
+        // Start with primary, then add all other valid codes in order
+        result = tokens.filter(t => {
+          if (t === primary) return true;
+          return isCode(t);
+        });
+        // Move primary to front if it isn't already
+        result = [primary, ...result.filter(t => t !== primary)];
+      } else {
+        // Prefix not matched — collect all valid codes ranked by score
+        result = tokens.filter(t => isCode(t)).sort((a,b) => codeScore(b) - codeScore(a));
+      }
+
+    } else {
+      // No prefix — collect all valid codes, best scored first
+      result = tokens.filter(t => isCode(t));
+    }
+
+    // Deduplicate preserving order
+    result = [...new Set(result)];
+
+    // Drop tokens that are substrings of another result token
+    result = result.filter(t => !result.some(o => o !== t && o.includes(t)));
+
+    // Drop tokens that score 0 (likely garbage) unless they're the only result
+    if (result.length > 1) {
+      const filtered = result.filter(t => codeScore(t) > 0);
+      if (filtered.length > 0) result = filtered;
+    }
+
+    return result.length > 0 ? result.join('_') : null;
+  }
+
+  function showOCRDetail(extracted, fullText) {
+    const card = document.getElementById('ocrEditCard');
+    const old = card.querySelector('.ocr-detail');
+    if (old) old.remove();
+
+    if (extracted) {
+      const parts = extracted.split('_');
+      const chips = parts.map(p =>
+        `<span style="display:inline-block;background:rgba(0,229,160,0.12);border:1px solid rgba(0,229,160,0.35);color:var(--accent);font-family:'JetBrains Mono',monospace;font-size:0.78rem;padding:2px 8px;border-radius:4px;margin:2px 3px 2px 0">${escHtml(p)}</span>`
+      ).join('<span style="color:var(--text-muted);font-size:0.8rem;margin:0 2px">+</span>');
+
+      const detail = document.createElement('div');
+      detail.className = 'ocr-detail';
+      detail.style.cssText = 'margin-top:12px;';
+      detail.innerHTML = `
+        <div style="font-family:\'DM Mono\',monospace;font-size:0.65rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-muted);margin-bottom:8px">Codes extracted</div>
+        <div style="margin-bottom:8px">${chips}</div>
+        <div style="font-size:0.72rem;color:var(--text-muted)">Joined as: 
+          <span style="color:var(--accent);font-family:\'DM Mono\',monospace">${escHtml(extracted)}</span>
+          &nbsp;·&nbsp;
+          <span style="cursor:pointer;color:var(--accent2);text-decoration:underline" onclick="showFullOCR('${fullText.replace(/'/g,"\\'").replace(/\n/g,' ').substring(0,300)}')">Show raw OCR →</span>
+        </div>`;
+      card.appendChild(detail);
+    }
+  }
+
+  function showFullOCR(text) {
+    document.getElementById('ocrEditInput').value = text;
+    showToast('Full OCR text loaded — edit and search again');
+  }
+
+  // ── Search (Routes to Selected Data Source) ─────────────
+  async function searchSheet(searchText) {
+    // FORCE: Always read from dropdown before searching
+    const dropdown = document.getElementById('dataSource');
+    if (dropdown) {
+      dataSource = dropdown.value;
+      localStorage.setItem('scanmatch_datasource', dataSource);
+    }
+    
+    console.log('🔍 Searching with dataSource:', dataSource);
+    console.log('🔍 Dropdown value:', dropdown ? dropdown.value : 'not found');
+    
+    if (dataSource === 'sellercloud') {
+      console.log('→ Routing to SellerCloud');
+      await searchSellerCloud(searchText);
+    } else {
+      console.log('→ Routing to Google Sheets');
+      await searchGoogleSheets(searchText);
+    }
+  }
+
+  // ── SellerCloud Search (via Railway Proxy) ──────────────
+  async function searchSellerCloud(searchText) {
+    if (!searchText.trim()) return;
+
+    showProcessing('Searching SellerCloud...');
+    document.getElementById('resultCard').classList.remove('visible');
+
+    try {
+      console.log('🔍 Searching SellerCloud via Railway proxy:', searchText);
+      
+      const response = await fetch(`${SELLERCLOUD.proxyUrl}/api/search`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({
+          searchText: searchText
+        })
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Proxy returned ${response.status}: ${errorText}`);
+      }
+
+      const data = await response.json();
+      console.log('📦 Proxy response:', data);
+
+      if (!data.success) {
+        throw new Error(data.error || 'Search failed');
+      }
+
+      const items = data.items || [];
+      console.log(`Found ${items.length} results`);
+
+      // Find best match using fuzzy matching
+      function normalize(str) {
+        return String(str).toUpperCase().replace(/[^A-Z0-9]/g, '');
+      }
+
+      function fuzzyNormalize(str) {
+        return normalize(str)
+          .replace(/O/g, '0')
+          .replace(/I/g, '1')
+          .replace(/S/g, '5')
+          .replace(/B/g, '8');
+      }
+
+      const searchNorm = normalize(searchText);
+      const searchFuzzy = fuzzyNormalize(searchText);
+
+      let bestMatch = null;
+      let bestScore = 0;
+
+      for (const item of items) {
+        const mfgSku = item.ManufacturerSKU || '';
+        const mfgNorm = normalize(mfgSku);
+        const mfgFuzzy = fuzzyNormalize(mfgSku);
+        
+        let score = 0;
+
+        if (mfgNorm === searchNorm) {
+          score = 100;
+        } else if (mfgFuzzy === searchFuzzy) {
+          score = 95;
+        } else if (mfgFuzzy.includes(searchFuzzy)) {
+          score = 70;
+        } else if (searchFuzzy.includes(mfgFuzzy) && mfgFuzzy.length >= 6) {
+          score = 60;
+        }
+
+        if (score > bestScore) {
+          bestScore = score;
+          bestMatch = item;
+          if (score >= 95) break;
+        }
+      }
+
+      console.log('Best match score:', bestScore);
+
+      hideProcessing();
+      
+      if (bestMatch) {
+        showToast('Match found in SellerCloud!');
+      } else {
+        showToast('No match found');
+      }
+      
+      showResultSellerCloud(searchText, bestMatch);
+      addHistory(searchText, !!bestMatch);
+
+    } catch (e) {
+      hideProcessing();
+      showToast('SellerCloud search failed');
+      console.error('❌ Search error:', e);
+      showResultSellerCloud(searchText, null);
+    }
+  }
+
+    // ── Google Sheets Search ─────────────────────────────────
+  async function searchGoogleSheets(searchText) {
+    if (!searchText.trim()) return;
+    if (!config.sheetId || !config.apiKey) {
+      showToast('Configure Google Sheets first');
+      return;
+    }
+
+    showProcessing('Searching Google Sheets...');
+    document.getElementById('resultCard').classList.remove('visible');
+
+    try {
+      const url = `https://sheets.googleapis.com/v4/spreadsheets/${config.sheetId}/values/${encodeURIComponent(config.sheetRange)}?key=${config.apiKey}`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error('Sheet fetch failed');
+      const data = await res.json();
+      
+      const rows = data.values || [];
+      if (rows.length === 0) {
+        hideProcessing();
+        showToast('Sheet is empty');
+        return;
+      }
+
+      function normalize(str) {
+        return String(str).toUpperCase().replace(/[^A-Z0-9]/g, '');
+      }
+
+      function fuzzyNormalize(str) {
+        return normalize(str)
+          .replace(/O/g, '0')
+          .replace(/I/g, '1')
+          .replace(/S/g, '5')
+          .replace(/B/g, '8');
+      }
+
+      const searchNorm = normalize(searchText);
+      const searchFuzzy = fuzzyNormalize(searchText);
+
+      let bestRow = null;
+      let bestScore = 0;
+
+      const dataStart = (rows[0] && isNaN(rows[0][0])) ? 1 : 0;
+      const matchColIndex = colLetterToIndex(config.matchCol);
+
+      for (let i = dataStart; i < rows.length; i++) {
+        const cellRaw = (rows[i][matchColIndex] || '').toString();
+        const cellNorm = normalize(cellRaw);
+        const cellFuzzy = fuzzyNormalize(cellRaw);
+        
+        if (!cellNorm) continue;
+
+        let score = 0;
+
+        if (cellNorm === searchNorm) {
+          score = 100;
+        } else if (cellFuzzy === searchFuzzy) {
+          score = 95;
+        } else if (cellFuzzy.includes(searchFuzzy)) {
+          score = 70;
+        } else if (searchFuzzy.includes(cellFuzzy) && cellFuzzy.length >= 6) {
+          score = 60;
+        }
+
+        if (score > bestScore) {
+          bestScore = score;
+          bestRow = rows[i];
+          if (score >= 95) break;
+        }
+      }
+
+      if (bestScore < 60) bestRow = null;
+
+      hideProcessing();
+      
+      if (bestRow) {
+        showToast('Match found!');
+      } else {
+        showToast('No match found');
+      }
+      
+      showResultGoogleSheets(searchText, bestRow);
+      addHistory(searchText, !!bestRow);
+
+    } catch (e) {
+      hideProcessing();
+      showToast('Google Sheets search failed');
+      console.error(e);
+    }
+  }
+
+    function colLetterToIndex(col) {
+    col = col.toUpperCase();
+    let n = 0;
+    for (let i = 0; i < col.length; i++) n = n * 26 + col.charCodeAt(i) - 64;
+    return n - 1;
+  }
+
+  // ── Display Result ───────────────────────────────────────
+  
+  function showResultSellerCloud(scannedText, product) {
+    const card = document.getElementById('resultCard');
+    const status = document.getElementById('resultStatus');
+    const grid = document.getElementById('matchGrid');
+
+    card.classList.add('visible');
+    grid.innerHTML = '';
+
+    if (product) {
+      const sku = product.ID || '—';
+      const msrp = product.ListPrice ? `$${product.ListPrice}` : '—';
+      const mfgSku = product.ManufacturerSKU || '—';
+
+      status.className = 'result-status found';
+      status.innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> Match found in SellerCloud`;
+
+      const skuBox = document.createElement('div');
+      skuBox.style.cssText = 'background:rgba(0,229,160,0.08);border:1px solid rgba(0,229,160,0.3);border-radius:12px;padding:20px;text-align:center;margin-bottom:12px';
+      skuBox.innerHTML = `
+        <div style="font-family:'JetBrains Mono',monospace;font-size:0.62rem;letter-spacing:0.15em;text-transform:uppercase;color:var(--text-muted);margin-bottom:10px">SKU</div>
+        <div style="font-family:'Playfair Display',serif;font-size:1.8rem;font-weight:600;letter-spacing:-0.02em;color:var(--accent);line-height:1.2;word-break:break-word">${escHtml(sku)}</div>
+      `;
+      grid.appendChild(skuBox);
+
+      const priceBox = document.createElement('div');
+      priceBox.style.cssText = 'background:rgba(123,97,255,0.08);border:1px solid rgba(123,97,255,0.3);border-radius:12px;padding:20px;text-align:center;margin-bottom:12px';
+      priceBox.innerHTML = `
+        <div style="font-family:'JetBrains Mono',monospace;font-size:0.62rem;letter-spacing:0.15em;text-transform:uppercase;color:var(--text-muted);margin-bottom:10px">MSRP</div>
+        <div style="font-family:'Playfair Display',serif;font-size:1.8rem;font-weight:600;letter-spacing:-0.02em;color:var(--accent2);line-height:1.2;word-break:break-word">${escHtml(msrp)}</div>
+      `;
+      grid.appendChild(priceBox);
+
+      const mfgRow = document.createElement('div');
+      mfgRow.className = 'match-row';
+      mfgRow.innerHTML = `<div class="match-key">Manufacturer SKU</div><div class="match-val" style="font-family:'JetBrains Mono',monospace;font-size:0.75rem">${escHtml(mfgSku)}</div>`;
+      grid.appendChild(mfgRow);
+
+      const scannedRow = document.createElement('div');
+      scannedRow.className = 'match-row';
+      scannedRow.innerHTML = `<div class="match-key">Scanned</div><div class="match-val" style="color:var(--text-dim);font-family:'JetBrains Mono',monospace;font-size:0.75rem">${escHtml(scannedText)}</div>`;
+      grid.appendChild(scannedRow);
+
+    } else {
+      status.className = 'result-status not-found';
+      status.innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> No match found`;
+
+      const el = document.createElement('div');
+      el.className = 'match-row';
+      el.innerHTML = `<div class="match-key">Scanned</div><div class="match-val" style="color:var(--text-dim);font-family:'JetBrains Mono',monospace">${escHtml(scannedText)}</div>`;
+      grid.appendChild(el);
+
+      const hint = document.createElement('div');
+      hint.style.cssText = 'font-size:0.78rem;color:var(--text-muted);line-height:1.6;padding:4px 0';
+      hint.textContent = 'Try editing the scanned text or check SellerCloud data.';
+      grid.appendChild(hint);
+    }
+  }
+
+  function showResultGoogleSheets(scannedText, row) {
+    const card = document.getElementById('resultCard');
+    const status = document.getElementById('resultStatus');
+    const grid = document.getElementById('matchGrid');
+
+    card.classList.add('visible');
+    grid.innerHTML = '';
+
+    if (row) {
+      const colA = row[0] || '—';
+      const colB = row[1] || '—';
+      const colC = row[2] || '—';
+
+      status.className = 'result-status found';
+      status.innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> Match found in Google Sheets`;
+
+      const skuBox = document.createElement('div');
+      skuBox.style.cssText = 'background:rgba(0,229,160,0.08);border:1px solid rgba(0,229,160,0.3);border-radius:12px;padding:20px;text-align:center;margin-bottom:12px';
+      skuBox.innerHTML = `
+        <div style="font-family:'JetBrains Mono',monospace;font-size:0.62rem;letter-spacing:0.15em;text-transform:uppercase;color:var(--text-muted);margin-bottom:10px">SKU (Col B)</div>
+        <div style="font-family:'Playfair Display',serif;font-size:1.8rem;font-weight:600;letter-spacing:-0.02em;color:var(--accent);line-height:1.2;word-break:break-word">${escHtml(colB)}</div>
+      `;
+      grid.appendChild(skuBox);
+
+      const priceBox = document.createElement('div');
+      priceBox.style.cssText = 'background:rgba(123,97,255,0.08);border:1px solid rgba(123,97,255,0.3);border-radius:12px;padding:20px;text-align:center;margin-bottom:12px';
+      priceBox.innerHTML = `
+        <div style="font-family:'JetBrains Mono',monospace;font-size:0.62rem;letter-spacing:0.15em;text-transform:uppercase;color:var(--text-muted);margin-bottom:10px">MSRP (Col C)</div>
+        <div style="font-family:'Playfair Display',serif;font-size:1.8rem;font-weight:600;letter-spacing:-0.02em;color:var(--accent2);line-height:1.2;word-break:break-word">${escHtml(colC)}</div>
+      `;
+      grid.appendChild(priceBox);
+
+      const matchRow = document.createElement('div');
+      matchRow.className = 'match-row';
+      matchRow.innerHTML = `<div class="match-key">Matched (Col A)</div><div class="match-val" style="font-family:'JetBrains Mono',monospace;font-size:0.75rem">${escHtml(colA)}</div>`;
+      grid.appendChild(matchRow);
+
+      const scannedRow = document.createElement('div');
+      scannedRow.className = 'match-row';
+      scannedRow.innerHTML = `<div class="match-key">Scanned</div><div class="match-val" style="color:var(--text-dim);font-family:'JetBrains Mono',monospace;font-size:0.75rem">${escHtml(scannedText)}</div>`;
+      grid.appendChild(scannedRow);
+
+    } else {
+      status.className = 'result-status not-found';
+      status.innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> No match found`;
+
+      const el = document.createElement('div');
+      el.className = 'match-row';
+      el.innerHTML = `<div class="match-key">Scanned</div><div class="match-val" style="color:var(--text-dim);font-family:'JetBrains Mono',monospace">${escHtml(scannedText)}</div>`;
+      grid.appendChild(el);
+
+      const hint = document.createElement('div');
+      hint.style.cssText = 'font-size:0.78rem;color:var(--text-muted);line-height:1.6;padding:4px 0';
+      hint.textContent = 'Try editing the scanned text or check your sheet data.';
+      grid.appendChild(hint);
+    }
+  }
+
+    // ── History ──────────────────────────────────────────────
+  function addHistory(text, found) {
+    const entry = { text, found, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) };
+    scanHistory.unshift(entry);
+    if (scanHistory.length > 20) scanHistory.pop();
+    localStorage.setItem('scanmatch_history', JSON.stringify(scanHistory));
+    renderHistory();
+  }
+
+  function renderHistory() {
+    const list = document.getElementById('historyList');
+    if (scanHistory.length === 0) {
+      list.innerHTML = '<div class="empty-state">No scans yet.<br>Start by scanning a product label.</div>';
+      return;
+    }
+    list.innerHTML = scanHistory.map((h, i) => `
+      <div class="history-item" onclick="reScanHistory(${i})">
+        <div class="history-dot ${h.found ? 'found' : 'not-found'}"></div>
+        <div class="history-text">${escHtml(h.text)}</div>
+        <div class="history-time">${h.time}</div>
+      </div>`).join('');
+  }
+
+  function reScanHistory(i) {
+    const entry = scanHistory[i];
+    document.getElementById('ocrEditInput').value = entry.text;
+    document.getElementById('ocrEditCard').style.display = 'block';
+    searchSheet(entry.text);
+  }
+
+  // ── UI helpers ───────────────────────────────────────────
+  function showProcessing(msg) {
+    const el = document.getElementById('processingBadge');
+    document.getElementById('processingText').textContent = msg;
+    el.classList.add('active');
+  }
+  function hideProcessing() {
+    document.getElementById('processingBadge').classList.remove('active');
+  }
+
+  function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 3000);
+  }
+
+  function escHtml(str) {
+    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+</script>
+</body>
+</html>

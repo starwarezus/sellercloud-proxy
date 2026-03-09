@@ -1,8 +1,3 @@
-// SellerCloud Proxy v1.1 - with variations support
-console.log('🚀 Starting SellerCloud Proxy with variations endpoint');
-
-const express = require('express');
-
 const express = require('express');
 const fetch = require('node-fetch');
 

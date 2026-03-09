@@ -88,7 +88,8 @@ app.get('/', (req, res) => {
     message: 'SellerCloud Proxy is running',
     endpoints: {
       search: 'POST /api/search',
-      test: 'GET /api/test'
+      test: 'GET /api/test',
+      getVariations: 'POST /api/get-variations'
     }
   });
 });
@@ -191,6 +192,82 @@ app.post('/api/search', async (req, res) => {
     res.status(500).json({
       success: false,
       error: error.message
+    });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════
+// NEW: Get product variations (children) by parent SKU
+// ═══════════════════════════════════════════════════════════════
+app.post('/api/get-variations', async (req, res) => {
+  try {
+    const { parentSKU } = req.body;
+
+    if (!parentSKU) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Missing parentSKU' 
+      });
+    }
+
+    console.log('📦 Fetching variations for parent SKU:', parentSKU);
+
+    const token = await getToken();
+
+    // Call SellerCloud Catalog API to get variations
+    const response = await fetch(`${SELLERCLOUD.baseUrl}/Catalog`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify({
+        Filters: [
+          {
+            Field: 'ParentProductID',
+            Operator: 'Equal',
+            Value: parentSKU
+          }
+        ],
+        pageNumber: 1,
+        pageSize: 100  // Get up to 100 variations
+      })
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('SellerCloud variations API error:', response.status, errorText);
+      return res.status(response.status).json({ 
+        success: false, 
+        error: 'Failed to fetch variations',
+        details: errorText
+      });
+    }
+
+    const data = await response.json();
+    
+    // Extract only ProductID and Size from children
+    const variations = (data.Items || []).map(item => ({
+      ProductID: item.ID || item.ProductID,
+      Size: item.Size || 'N/A',
+      SKU: item.ID || item.ProductID
+    }));
+
+    console.log(`✅ Found ${variations.length} variations for ${parentSKU}`);
+
+    res.json({
+      success: true,
+      parentSKU: parentSKU,
+      variations: variations,
+      totalVariations: variations.length
+    });
+
+  } catch (error) {
+    console.error('❌ Error fetching variations:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: error.message 
     });
   }
 });

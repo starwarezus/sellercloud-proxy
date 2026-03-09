@@ -212,24 +212,15 @@ app.post('/api/get-variations', async (req, res) => {
 
     const token = await getToken();
 
-    const response = await fetch(`${SELLERCLOUD.baseUrl}/Catalog`, {
-      method: 'POST',
+    // Use GET request with query parameters (SellerCloud doesn't support POST to /Catalog)
+    const apiUrl = `${SELLERCLOUD.baseUrl}/Catalog?model.parentProductID=${encodeURIComponent(parentSKU)}&model.pageSize=100&model.pageNumber=1`;
+
+    const response = await fetch(apiUrl, {
+      method: 'GET',
       headers: {
         'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
         'Accept': 'application/json'
-      },
-      body: JSON.stringify({
-        Filters: [
-          {
-            Field: 'ParentProductID',
-            Operator: 'Equal',
-            Value: parentSKU
-          }
-        ],
-        pageNumber: 1,
-        pageSize: 100
-      })
+      }
     });
 
     if (!response.ok) {

@@ -235,10 +235,21 @@ app.post('/api/get-variations', async (req, res) => {
 
     const data = await response.json();
     
+    // DEBUG: Log the first item to see all available fields
+    if (data.Items && data.Items.length > 0) {
+      console.log('=== FIRST VARIATION RAW DATA ===');
+      console.log(JSON.stringify(data.Items[0], null, 2));
+      console.log('=== ALL FIELD NAMES ===');
+      console.log(Object.keys(data.Items[0]));
+      console.log('================================');
+    }
+    
     const variations = (data.Items || []).map(item => ({
       ProductID: item.ID || item.ProductID,
       Size: item.Size || 'N/A',
-      SKU: item.ID || item.ProductID
+      SKU: item.ID || item.ProductID,
+      // Include ALL fields for debugging
+      _raw: item
     }));
 
     console.log(`✅ Found ${variations.length} variations for ${parentSKU}`);

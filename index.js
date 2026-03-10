@@ -196,22 +196,15 @@ app.post('/api/search', async (req, res) => {
   }
 });
 
-// Helper function to extract size from CustomColumns
-function extractSize(customColumns) {
-  if (!customColumns) return 'N/A';
+// Helper function to extract size from product ID
+function extractSize(productID) {
+  if (!productID) return 'N/A';
   
-  // CustomColumns is usually an array or object with custom field values
-  // Look for a field named "Size" or similar
-  if (Array.isArray(customColumns)) {
-    const sizeField = customColumns.find(col => 
-      col.Name && col.Name.toLowerCase() === 'size'
-    );
-    return sizeField?.Value || 'N/A';
-  }
-  
-  // If it's an object, try to find size property
-  if (typeof customColumns === 'object') {
-    return customColumns.Size || customColumns.size || 'N/A';
+  // Extract the part after the last dash (e.g., ZPMS007806_LM071_00M24-SH04 → SH04)
+  const parts = productID.split('-');
+  if (parts.length > 1) {
+    const sizeCode = parts[parts.length - 1].trim();
+    return sizeCode || 'N/A';
   }
   
   return 'N/A';
@@ -233,10 +226,45 @@ app.post('/api/get-variations', async (req, res) => {
 
     const token = await getToken();
 
-    // Use GET request with query parameters
-    const apiUrl = `${SELLERCLOUD.baseUrl}/Catalog?model.parentProductID=${encodeURIComponent(parentSKU)}&model.pageSize=100&model.pageNumber=1`;
+    // STEP 1: First, find the parent product to get its ProductID
+    const parentUrl = `${SELLERCLOUD.baseUrl}/Catalog?model.sKU=${encodeURIComponent(parentSKU)}`;
+    
+    const parentResponse = await fetch(parentUrl, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Accept': 'application/json'
+      }
+    });
 
-    const response = await fetch(apiUrl, {
+    if (!parentResponse.ok) {
+      const errorText = await parentResponse.text();
+      console.error('Failed to find parent product:', parentResponse.status, errorText);
+      return res.status(parentResponse.status).json({ 
+        success: false, 
+        error: 'Failed to find parent product',
+        details: errorText
+      });
+    }
+
+    const parentData = await parentResponse.json();
+    
+    if (!parentData.Items || parentData.Items.length === 0) {
+      return res.status(404).json({ 
+        success: false, 
+        error: 'Parent product not found' 
+      });
+    }
+
+    const parentProduct = parentData.Items[0];
+    const parentProductID = parentProduct.ID;
+    
+    console.log(`Found parent product ID: ${parentProductID}`);
+
+    // STEP 2: Now search for variations using the parent's ProductID
+    const variationsUrl = `${SELLERCLOUD.baseUrl}/Catalog?model.parentProductID=${encodeURIComponent(parentProductID)}&model.pageSize=100&model.pageNumber=1`;
+
+    const response = await fetch(variationsUrl, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -256,9 +284,16 @@ app.post('/api/get-variations', async (req, res) => {
 
     const data = await response.json();
     
-    // Extract variations with size from CustomColumns
+    // Extract variations with size from CustomColumns (SIZE field)
     const variations = (data.Items || []).map(item => {
-      const size = extractSize(item.CustomColumns);
+      // Find the SIZE custom column
+      let size = 'N/A';
+      if (Array.isArray(item.CustomColumns)) {
+        const sizeCol = item.CustomColumns.find(col => col.ColumnName === 'SIZE');
+        if (sizeCol && sizeCol.Value) {
+          size = sizeCol.Value;
+        }
+      }
       
       return {
         ProductID: item.ID,
@@ -268,23 +303,20 @@ app.post('/api/get-variations', async (req, res) => {
       };
     });
 
-    console.log(`✅ Found ${variations.length} variations for ${parentSKU}`);
+    console.log(`✅ Found ${variations.length} variations for parent ID ${parentProductID}`);
     
-    // Log first few examples with full debug info
+    // Log first few examples
     if (variations.length > 0) {
       console.log('Sample variations:');
-      variations.slice(0, 3).forEach((v, idx) => {
-        const item = data.Items[idx];
-        console.log(`  - ID: ${v.ProductID}`);
-        console.log(`    Size: ${v.Size}`);
-        console.log(`    CustomColumns:`, JSON.stringify(item.CustomColumns));
-        console.log('');
+      variations.slice(0, 3).forEach(v => {
+        console.log(`  - ID: ${v.ProductID} | Size: ${v.Size}`);
       });
     }
 
     res.json({
       success: true,
       parentSKU: parentSKU,
+      parentProductID: parentProductID,
       variations: variations,
       totalVariations: variations.length
     });

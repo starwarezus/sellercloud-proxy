@@ -196,6 +196,21 @@ app.post('/api/search', async (req, res) => {
   }
 });
 
+// Helper function to extract size from ProductName
+function extractSize(productName) {
+  if (!productName) return 'N/A';
+  
+  // Split by '-' and get the last part
+  const parts = productName.split('-');
+  if (parts.length > 0) {
+    const lastPart = parts[parts.length - 1].trim();
+    // Return the last part if it's not empty
+    return lastPart || 'N/A';
+  }
+  
+  return 'N/A';
+}
+
 // Get product variations (children) by parent SKU
 app.post('/api/get-variations', async (req, res) => {
   try {
@@ -212,7 +227,7 @@ app.post('/api/get-variations', async (req, res) => {
 
     const token = await getToken();
 
-    // Use GET request with query parameters (SellerCloud doesn't support POST to /Catalog)
+    // Use GET request with query parameters
     const apiUrl = `${SELLERCLOUD.baseUrl}/Catalog?model.parentProductID=${encodeURIComponent(parentSKU)}&model.pageSize=100&model.pageNumber=1`;
 
     const response = await fetch(apiUrl, {
@@ -235,24 +250,27 @@ app.post('/api/get-variations', async (req, res) => {
 
     const data = await response.json();
     
-    // DEBUG: Log ONLY the field names and one sample
-    if (data.Items && data.Items.length > 0) {
-      const firstItem = data.Items[0];
-      console.log('=== AVAILABLE FIELDS ===');
-      console.log('Field names:', Object.keys(firstItem).join(', '));
-      console.log('Sample ID:', firstItem.ID);
-      console.log('Sample Size:', firstItem.Size);
-      console.log('Sample ManufacturerSKU:', firstItem.ManufacturerSKU);
-      console.log('========================');
-    }
-    
-    const variations = (data.Items || []).map(item => ({
-      ProductID: item.ID || item.ProductID,
-      Size: item.Size || 'N/A',
-      SKU: item.ID || item.ProductID
-    }));
+    // Extract variations with size from ProductName
+    const variations = (data.Items || []).map(item => {
+      const size = extractSize(item.ProductName);
+      
+      return {
+        ProductID: item.ID,
+        Size: size,
+        ProductName: item.ProductName,
+        SKU: item.ManufacturerSKU || item.ID
+      };
+    });
 
     console.log(`✅ Found ${variations.length} variations for ${parentSKU}`);
+    
+    // Log first few examples
+    if (variations.length > 0) {
+      console.log('Sample variations:');
+      variations.slice(0, 3).forEach(v => {
+        console.log(`  - ${v.ProductName} → Size: ${v.Size} (ID: ${v.ProductID})`);
+      });
+    }
 
     res.json({
       success: true,
@@ -273,3 +291,19 @@ app.post('/api/get-variations', async (req, res) => {
 app.listen(PORT, () => {
   console.log(`SellerCloud Proxy running on port ${PORT}`);
 });
+```
+
+**What changed:**
+1. Added `extractSize()` function that splits ProductName by `-` and takes the last part
+2. Maps variations to use:
+   - `ProductID: item.ID` ← The actual product ID
+   - `Size: extractSize(item.ProductName)` ← Extracts size from name
+   - `ProductName: item.ProductName` ← Keep full name for reference
+3. Added sample logging to verify it works
+
+**Copy this entire code and push to `sellercloud-proxy` repo!** 
+
+Then test and check the Railway logs - you should see:
+```
+Sample variations:
+  - BC-M-VEST-38-44 → Size: 44 (ID: i12345)

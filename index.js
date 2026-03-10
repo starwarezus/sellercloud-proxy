@@ -196,16 +196,22 @@ app.post('/api/search', async (req, res) => {
   }
 });
 
-// Helper function to extract size from ProductName
-function extractSize(productName) {
-  if (!productName) return 'N/A';
+// Helper function to extract size from CustomColumns
+function extractSize(customColumns) {
+  if (!customColumns) return 'N/A';
   
-  // Split by '-' and get the last part
-  const parts = productName.split('-');
-  if (parts.length > 0) {
-    const lastPart = parts[parts.length - 1].trim();
-    // Return the last part if it's not empty
-    return lastPart || 'N/A';
+  // CustomColumns is usually an array or object with custom field values
+  // Look for a field named "Size" or similar
+  if (Array.isArray(customColumns)) {
+    const sizeField = customColumns.find(col => 
+      col.Name && col.Name.toLowerCase() === 'size'
+    );
+    return sizeField?.Value || 'N/A';
+  }
+  
+  // If it's an object, try to find size property
+  if (typeof customColumns === 'object') {
+    return customColumns.Size || customColumns.size || 'N/A';
   }
   
   return 'N/A';
@@ -250,9 +256,9 @@ app.post('/api/get-variations', async (req, res) => {
 
     const data = await response.json();
     
-    // Extract variations with size from ProductName
+    // Extract variations with size from CustomColumns
     const variations = (data.Items || []).map(item => {
-      const size = extractSize(item.ProductName);
+      const size = extractSize(item.CustomColumns);
       
       return {
         ProductID: item.ID,
@@ -264,11 +270,15 @@ app.post('/api/get-variations', async (req, res) => {
 
     console.log(`✅ Found ${variations.length} variations for ${parentSKU}`);
     
-    // Log first few examples
+    // Log first few examples with full debug info
     if (variations.length > 0) {
       console.log('Sample variations:');
-      variations.slice(0, 3).forEach(v => {
-        console.log(`  - ${v.ProductName} → Size: ${v.Size} (ID: ${v.ProductID})`);
+      variations.slice(0, 3).forEach((v, idx) => {
+        const item = data.Items[idx];
+        console.log(`  - ID: ${v.ProductID}`);
+        console.log(`    Size: ${v.Size}`);
+        console.log(`    CustomColumns:`, JSON.stringify(item.CustomColumns));
+        console.log('');
       });
     }
 

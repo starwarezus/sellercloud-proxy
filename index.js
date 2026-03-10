@@ -235,21 +235,21 @@ app.post('/api/get-variations', async (req, res) => {
 
     const data = await response.json();
     
-    // DEBUG: Log the first item to see all available fields
+    // DEBUG: Log ONLY the field names and one sample
     if (data.Items && data.Items.length > 0) {
-      console.log('=== FIRST VARIATION RAW DATA ===');
-      console.log(JSON.stringify(data.Items[0], null, 2));
-      console.log('=== ALL FIELD NAMES ===');
-      console.log(Object.keys(data.Items[0]));
-      console.log('================================');
+      const firstItem = data.Items[0];
+      console.log('=== AVAILABLE FIELDS ===');
+      console.log('Field names:', Object.keys(firstItem).join(', '));
+      console.log('Sample ID:', firstItem.ID);
+      console.log('Sample Size:', firstItem.Size);
+      console.log('Sample ManufacturerSKU:', firstItem.ManufacturerSKU);
+      console.log('========================');
     }
     
     const variations = (data.Items || []).map(item => ({
       ProductID: item.ID || item.ProductID,
       Size: item.Size || 'N/A',
-      SKU: item.ID || item.ProductID,
-      // Include ALL fields for debugging
-      _raw: item
+      SKU: item.ID || item.ProductID
     }));
 
     console.log(`✅ Found ${variations.length} variations for ${parentSKU}`);

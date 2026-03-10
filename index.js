@@ -291,19 +291,3 @@ app.post('/api/get-variations', async (req, res) => {
 app.listen(PORT, () => {
   console.log(`SellerCloud Proxy running on port ${PORT}`);
 });
-```
-
-**What changed:**
-1. Added `extractSize()` function that splits ProductName by `-` and takes the last part
-2. Maps variations to use:
-   - `ProductID: item.ID` ← The actual product ID
-   - `Size: extractSize(item.ProductName)` ← Extracts size from name
-   - `ProductName: item.ProductName` ← Keep full name for reference
-3. Added sample logging to verify it works
-
-**Copy this entire code and push to `sellercloud-proxy` repo!** 
-
-Then test and check the Railway logs - you should see:
-```
-Sample variations:
-  - BC-M-VEST-38-44 → Size: 44 (ID: i12345)

@@ -287,6 +287,15 @@ app.post('/api/get-variations', async (req, res) => {
 
     const data = await response.json();
     
+    console.log(`📊 Fetched ${data.Items?.length || 0} total products`);
+    
+    // Filter manually for products where ManufacturerSKU matches the parent SKU
+    const matchingItems = (data.Items || []).filter(item => {
+      return item.ManufacturerSKU === parentSKU && item.ID !== parentSKU;
+    });
+    
+    console.log(`✅ Found ${matchingItems.length} products with ManufacturerSKU = ${parentSKU}`);
+    
     // Extract variations with size from CustomColumns (SIZE field)
     const variations = matchingItems.map(item => {
       // Find the SIZE custom column

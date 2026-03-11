@@ -258,13 +258,17 @@ app.post('/api/get-variations', async (req, res) => {
 
     const parentProduct = parentData.Items[0];
     
-    console.log(`📦 Parent SKU: ${parentSKU}`);
-    console.log(`📦 Parent ID: ${parentProduct.ID}`);
+    console.log(`📦 Parent SKU (ID field): ${parentProduct.ID}`);
+    console.log(`📦 Parent ProductID field: ${parentProduct.ProductID}`);
+    console.log(`📦 Parent MainProductID field: ${parentProduct.MainProductID}`);
+    console.log(`📦 All parent fields:`, Object.keys(parentProduct).join(', '));
     
-    // STEP 2: Use the dedicated Variation endpoint with productID = parent SKU
-    console.log(`🔍 Using /Catalog/Variation endpoint with productID=${parentSKU}`);
+    // Try using ProductID or MainProductID if they exist and are numeric
+    let productIDToUse = parentProduct.ProductID || parentProduct.MainProductID || parentProduct.ID;
     
-    const variationUrl = `${SELLERCLOUD.baseUrl}/Catalog/Variation?model.productID=${encodeURIComponent(parentSKU)}&model.pageSize=100&model.pageNumber=1`;
+    console.log(`🔍 Using /Catalog/Variation endpoint with productID=${productIDToUse}`);
+    
+    const variationUrl = `${SELLERCLOUD.baseUrl}/Catalog/Variation?model.productID=${encodeURIComponent(productIDToUse)}&model.pageSize=100&model.pageNumber=1`;
     
     const response = await fetch(variationUrl, {
       method: 'GET',
@@ -286,26 +290,23 @@ app.post('/api/get-variations', async (req, res) => {
 
     const data = await response.json();
     
-    console.log(`📊 Variation endpoint returned ${data.Items?.length || 0} products`);
+    console.log(`📊 Variation endpoint response structure:`, Object.keys(data).join(', '));
     
-    const matchingItems = data.Items || [];
+    // The response has a Matrix.Rows structure, not Items
+    const matrixRows = data.Matrix?.Rows || [];
     
-    // Extract variations with size from CustomColumns (SIZE field)
-    const variations = matchingItems.map(item => {
-      // Find the SIZE custom column
-      let size = 'N/A';
-      if (Array.isArray(item.CustomColumns)) {
-        const sizeCol = item.CustomColumns.find(col => col.ColumnName === 'SIZE');
-        if (sizeCol && sizeCol.Value) {
-          size = sizeCol.Value;
-        }
-      }
+    console.log(`✅ Found ${matrixRows.length} variations in Matrix`);
+    
+    // Extract variations from Matrix.Rows structure
+    const variations = matrixRows.map(rowObj => {
+      const row = rowObj.Row;
       
       return {
-        ProductID: item.ID,
-        Size: size,
-        ProductName: item.ProductName,
-        SKU: item.ManufacturerSKU || item.ID
+        ProductID: row.ProductID?.Value || 'N/A',
+        Size: row.Size?.Value || 'N/A',
+        ProductName: `${parentSKU} - ${row.Size?.Value || 'N/A'}`,
+        SKU: row.ProductID?.Value || 'N/A',
+        AvailableQty: row['Available Qty']?.Value || '0'
       };
     });
 

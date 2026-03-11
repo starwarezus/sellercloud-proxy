@@ -261,36 +261,57 @@ app.post('/api/get-variations', async (req, res) => {
     console.log(`📦 Parent SKU: ${parentSKU}`);
     console.log(`📦 Parent ID: ${parentProduct.ID}`);
     
-    // STEP 2: Fetch a large batch of products and filter manually
-    // SellerCloud API filters don't seem to work, so we'll filter in code
-    console.log(`🔍 Fetching products to filter manually...`);
+    // STEP 2: Fetch multiple pages of products and filter manually
+    console.log(`🔍 Fetching products across multiple pages...`);
     
-    const variationsUrl = `${SELLERCLOUD.baseUrl}/Catalog?model.pageSize=500&model.pageNumber=1`;
-
-    const response = await fetch(variationsUrl, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Accept': 'application/json'
-      }
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('SellerCloud variations API error:', response.status, errorText);
-      return res.status(response.status).json({ 
-        success: false, 
-        error: 'Failed to fetch variations',
-        details: errorText
+    let allItems = [];
+    const pageSize = 50;
+    const maxPages = 20; // Fetch up to 1000 products
+    
+    for (let page = 1; page <= maxPages; page++) {
+      const variationsUrl = `${SELLERCLOUD.baseUrl}/Catalog?model.pageSize=${pageSize}&model.pageNumber=${page}`;
+      
+      const response = await fetch(variationsUrl, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json'
+        }
       });
-    }
 
-    const data = await response.json();
+      if (!response.ok) {
+        console.error(`Failed to fetch page ${page}`);
+        break;
+      }
+
+      const data = await response.json();
+      
+      if (!data.Items || data.Items.length === 0) {
+        console.log(`No more products at page ${page}`);
+        break;
+      }
+      
+      allItems.push(...data.Items);
+      console.log(`📄 Page ${page}: ${data.Items.length} products (total: ${allItems.length})`);
+      
+      // If we find matching items, we can stop early
+      const matches = data.Items.filter(item => 
+        item.ManufacturerSKU === parentSKU && item.ID !== parentSKU
+      );
+      
+      if (matches.length > 0) {
+        console.log(`✅ Found ${matches.length} matches on page ${page}, stopping search`);
+        allItems = allItems.filter(item => 
+          item.ManufacturerSKU === parentSKU && item.ID !== parentSKU
+        );
+        break;
+      }
+    }
     
-    console.log(`📊 Fetched ${data.Items?.length || 0} total products`);
+    console.log(`📊 Fetched ${allItems.length} total products across all pages`);
     
     // Filter manually for products where ManufacturerSKU matches the parent SKU
-    const matchingItems = (data.Items || []).filter(item => {
+    const matchingItems = allItems.filter(item => {
       return item.ManufacturerSKU === parentSKU && item.ID !== parentSKU;
     });
     

@@ -297,18 +297,61 @@ app.post('/api/get-variations', async (req, res) => {
     
     console.log(`✅ Found ${matrixRows.length} variations in Matrix`);
     
-    // Extract variations from Matrix.Rows structure
-    const variations = matrixRows.map(rowObj => {
-      const row = rowObj.Row;
-      
-      return {
-        ProductID: row.ProductID?.Value || 'N/A',
-        Size: row.Size?.Value || 'N/A',
-        ProductName: `${parentSKU} - ${row.Size?.Value || 'N/A'}`,
-        SKU: row.ProductID?.Value || 'N/A',
-        AvailableQty: row['Available Qty']?.Value || '0'
-      };
-    });
+    // Extract basic variation info from Matrix
+    const variationIds = matrixRows.map(rowObj => ({
+      ProductID: rowObj.Row.ProductID?.Value || 'N/A',
+      Size: rowObj.Row.Size?.Value || 'N/A',
+      AvailableQty: rowObj.Row['Available Qty']?.Value || '0'
+    }));
+    
+    // Fetch full details for each variation to get ProductName
+    console.log(`🔍 Fetching product names for ${variationIds.length} variations...`);
+    
+    const variations = await Promise.all(
+      variationIds.map(async (variation) => {
+        try {
+          const detailUrl = `${SELLERCLOUD.baseUrl}/Catalog?model.sKU=${encodeURIComponent(variation.ProductID)}`;
+          const detailResponse = await fetch(detailUrl, {
+            method: 'GET',
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Accept': 'application/json'
+            }
+          });
+          
+          if (detailResponse.ok) {
+            const detailData = await detailResponse.json();
+            const productName = detailData.Items?.[0]?.ProductName || `${parentSKU} - ${variation.Size}`;
+            
+            return {
+              ProductID: variation.ProductID,
+              Size: variation.Size,
+              ProductName: productName,
+              SKU: variation.ProductID,
+              AvailableQty: variation.AvailableQty
+            };
+          } else {
+            // Fallback if detail fetch fails
+            return {
+              ProductID: variation.ProductID,
+              Size: variation.Size,
+              ProductName: `${parentSKU} - ${variation.Size}`,
+              SKU: variation.ProductID,
+              AvailableQty: variation.AvailableQty
+            };
+          }
+        } catch (error) {
+          console.error(`Failed to fetch details for ${variation.ProductID}:`, error.message);
+          return {
+            ProductID: variation.ProductID,
+            Size: variation.Size,
+            ProductName: `${parentSKU} - ${variation.Size}`,
+            SKU: variation.ProductID,
+            AvailableQty: variation.AvailableQty
+          };
+        }
+      })
+    );
 
     console.log(`✅ Found ${variations.length} variations for ${parentSKU}`);
     

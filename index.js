@@ -299,6 +299,15 @@ app.post('/api/get-variations', async (req, res) => {
         item.ManufacturerSKU === parentSKU && item.ID !== parentSKU
       );
       
+      // Debug: log some ManufacturerSKU values from this page
+      if (page === 1) {
+        console.log(`📋 Sample ManufacturerSKUs from page 1:`);
+        data.Items.slice(0, 5).forEach(item => {
+          console.log(`  - ID: ${item.ID} | ManufacturerSKU: "${item.ManufacturerSKU}"`);
+        });
+        console.log(`🎯 Looking for ManufacturerSKU: "${parentSKU}"`);
+      }
+      
       if (matches.length > 0) {
         console.log(`✅ Found ${matches.length} matches on page ${page}, stopping search`);
         allItems = allItems.filter(item => 

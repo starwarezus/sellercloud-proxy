@@ -257,9 +257,18 @@ app.post('/api/get-variations', async (req, res) => {
     }
 
     const parentProduct = parentData.Items[0];
-    const parentProductID = parentProduct.ID;
     
-    console.log(`Found parent product ID: ${parentProductID}`);
+    // Try multiple fields to find the numeric ProductID (starts with 'i')
+    const parentProductID = parentProduct.ProductID || 
+                           parentProduct.MainProductID || 
+                           parentProduct.WebsiteProductID ||
+                           parentProduct.ID;
+    
+    console.log(`Parent SKU: ${parentSKU}`);
+    console.log(`Parent ID field: ${parentProduct.ID}`);
+    console.log(`Parent ProductID field: ${parentProduct.ProductID}`);
+    console.log(`Parent MainProductID field: ${parentProduct.MainProductID}`);
+    console.log(`Using parent product ID: ${parentProductID}`);
 
     // STEP 2: Now search for variations using the parent's ProductID
     const variationsUrl = `${SELLERCLOUD.baseUrl}/Catalog?model.parentProductID=${encodeURIComponent(parentProductID)}&model.pageSize=100&model.pageNumber=1`;

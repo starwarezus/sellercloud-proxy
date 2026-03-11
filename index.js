@@ -259,10 +259,16 @@ app.post('/api/get-variations', async (req, res) => {
     const parentProduct = parentData.Items[0];
     
     console.log(`📦 Parent SKU: ${parentSKU}`);
-    console.log(`🔍 Searching for children where ManufacturerSKU = ${parentSKU}`);
+    console.log(`📦 Parent ID: ${parentProduct.ID}`);
+    console.log(`📦 Parent ManufacturerID: ${parentProduct.ManufacturerID}`);
+    console.log(`📦 Parent ManufacturerSKU: ${parentProduct.ManufacturerSKU}`);
+    
+    // Try searching by ManufacturerID instead
+    const searchParam = parentProduct.ManufacturerID || parentSKU;
+    console.log(`🔍 Searching for children where ManufacturerID = ${searchParam}`);
 
-    // STEP 2: Search for child products where ManufacturerSKU = parent SKU
-    const variationsUrl = `${SELLERCLOUD.baseUrl}/Catalog?model.manufacturerSKU=${encodeURIComponent(parentSKU)}&model.pageSize=100&model.pageNumber=1`;
+    // STEP 2: Search for child products where ManufacturerID matches
+    const variationsUrl = `${SELLERCLOUD.baseUrl}/Catalog?model.manufacturerID=${encodeURIComponent(searchParam)}&model.pageSize=100&model.pageNumber=1`;
 
     const response = await fetch(variationsUrl, {
       method: 'GET',

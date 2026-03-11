@@ -258,20 +258,11 @@ app.post('/api/get-variations', async (req, res) => {
 
     const parentProduct = parentData.Items[0];
     
-    // Try multiple fields to find the numeric ProductID (starts with 'i')
-    const parentProductID = parentProduct.ProductID || 
-                           parentProduct.MainProductID || 
-                           parentProduct.WebsiteProductID ||
-                           parentProduct.ID;
-    
-    console.log(`Parent SKU: ${parentSKU}`);
-    console.log(`Parent ID field: ${parentProduct.ID}`);
-    console.log(`Parent ProductID field: ${parentProduct.ProductID}`);
-    console.log(`Parent MainProductID field: ${parentProduct.MainProductID}`);
-    console.log(`Using parent product ID: ${parentProductID}`);
+    console.log(`📦 Parent SKU: ${parentSKU}`);
+    console.log(`🔍 Searching for children where ManufacturerSKU = ${parentSKU}`);
 
-    // STEP 2: Now search for variations using the parent's ProductID
-    const variationsUrl = `${SELLERCLOUD.baseUrl}/Catalog?model.parentProductID=${encodeURIComponent(parentProductID)}&model.pageSize=100&model.pageNumber=1`;
+    // STEP 2: Search for child products where ManufacturerSKU = parent SKU
+    const variationsUrl = `${SELLERCLOUD.baseUrl}/Catalog?model.manufacturerSKU=${encodeURIComponent(parentSKU)}&model.pageSize=100&model.pageNumber=1`;
 
     const response = await fetch(variationsUrl, {
       method: 'GET',
@@ -312,12 +303,12 @@ app.post('/api/get-variations', async (req, res) => {
       };
     });
 
-    console.log(`✅ Found ${variations.length} variations for parent ID ${parentProductID}`);
+    console.log(`✅ Found ${variations.length} variations for ${parentSKU}`);
     
     // Log first few examples
     if (variations.length > 0) {
       console.log('Sample variations:');
-      variations.slice(0, 3).forEach(v => {
+      variations.slice(0, 5).forEach(v => {
         console.log(`  - ID: ${v.ProductID} | Size: ${v.Size}`);
       });
     }
@@ -325,7 +316,6 @@ app.post('/api/get-variations', async (req, res) => {
     res.json({
       success: true,
       parentSKU: parentSKU,
-      parentProductID: parentProductID,
       variations: variations,
       totalVariations: variations.length
     });

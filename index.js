@@ -260,15 +260,12 @@ app.post('/api/get-variations', async (req, res) => {
     
     console.log(`📦 Parent SKU: ${parentSKU}`);
     console.log(`📦 Parent ID: ${parentProduct.ID}`);
-    console.log(`📦 Parent ManufacturerID: ${parentProduct.ManufacturerID}`);
-    console.log(`📦 Parent ManufacturerSKU: ${parentProduct.ManufacturerSKU}`);
     
-    // Try searching by ManufacturerID instead
-    const searchParam = parentProduct.ManufacturerID || parentSKU;
-    console.log(`🔍 Searching for children where ManufacturerID = ${searchParam}`);
-
-    // STEP 2: Search for child products where ManufacturerID matches
-    const variationsUrl = `${SELLERCLOUD.baseUrl}/Catalog?model.manufacturerID=${encodeURIComponent(searchParam)}&model.pageSize=100&model.pageNumber=1`;
+    // STEP 2: Fetch a large batch of products and filter manually
+    // SellerCloud API filters don't seem to work, so we'll filter in code
+    console.log(`🔍 Fetching products to filter manually...`);
+    
+    const variationsUrl = `${SELLERCLOUD.baseUrl}/Catalog?model.pageSize=500&model.pageNumber=1`;
 
     const response = await fetch(variationsUrl, {
       method: 'GET',
@@ -291,7 +288,7 @@ app.post('/api/get-variations', async (req, res) => {
     const data = await response.json();
     
     // Extract variations with size from CustomColumns (SIZE field)
-    const variations = (data.Items || []).map(item => {
+    const variations = matchingItems.map(item => {
       // Find the SIZE custom column
       let size = 'N/A';
       if (Array.isArray(item.CustomColumns)) {

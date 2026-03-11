@@ -261,70 +261,34 @@ app.post('/api/get-variations', async (req, res) => {
     console.log(`📦 Parent SKU: ${parentSKU}`);
     console.log(`📦 Parent ID: ${parentProduct.ID}`);
     
-    // STEP 2: Fetch multiple pages of products and filter manually
-    console.log(`🔍 Fetching products across multiple pages...`);
+    // STEP 2: Use the dedicated Variation endpoint with productID = parent SKU
+    console.log(`🔍 Using /Catalog/Variation endpoint with productID=${parentSKU}`);
     
-    let allItems = [];
-    const pageSize = 50;
-    const maxPages = 20; // Fetch up to 1000 products
+    const variationUrl = `${SELLERCLOUD.baseUrl}/Catalog/Variation?model.productID=${encodeURIComponent(parentSKU)}&model.pageSize=100&model.pageNumber=1`;
     
-    for (let page = 1; page <= maxPages; page++) {
-      const variationsUrl = `${SELLERCLOUD.baseUrl}/Catalog?model.pageSize=${pageSize}&model.pageNumber=${page}`;
-      
-      const response = await fetch(variationsUrl, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Accept': 'application/json'
-        }
-      });
-
-      if (!response.ok) {
-        console.error(`Failed to fetch page ${page}`);
-        break;
+    const response = await fetch(variationUrl, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Accept': 'application/json'
       }
-
-      const data = await response.json();
-      
-      if (!data.Items || data.Items.length === 0) {
-        console.log(`No more products at page ${page}`);
-        break;
-      }
-      
-      allItems.push(...data.Items);
-      console.log(`📄 Page ${page}: ${data.Items.length} products (total: ${allItems.length})`);
-      
-      // If we find matching items, we can stop early
-      const matches = data.Items.filter(item => 
-        item.ManufacturerSKU === parentSKU && item.ID !== parentSKU
-      );
-      
-      // Debug: log some ManufacturerSKU values from this page
-      if (page === 1) {
-        console.log(`📋 Sample ManufacturerSKUs from page 1:`);
-        data.Items.slice(0, 5).forEach(item => {
-          console.log(`  - ID: ${item.ID} | ManufacturerSKU: "${item.ManufacturerSKU}"`);
-        });
-        console.log(`🎯 Looking for ManufacturerSKU: "${parentSKU}"`);
-      }
-      
-      if (matches.length > 0) {
-        console.log(`✅ Found ${matches.length} matches on page ${page}, stopping search`);
-        allItems = allItems.filter(item => 
-          item.ManufacturerSKU === parentSKU && item.ID !== parentSKU
-        );
-        break;
-      }
-    }
-    
-    console.log(`📊 Fetched ${allItems.length} total products across all pages`);
-    
-    // Filter manually for products where ManufacturerSKU matches the parent SKU
-    const matchingItems = allItems.filter(item => {
-      return item.ManufacturerSKU === parentSKU && item.ID !== parentSKU;
     });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('SellerCloud Variation API error:', response.status, errorText);
+      return res.status(response.status).json({ 
+        success: false, 
+        error: 'Failed to fetch variations',
+        details: errorText
+      });
+    }
+
+    const data = await response.json();
     
-    console.log(`✅ Found ${matchingItems.length} products with ManufacturerSKU = ${parentSKU}`);
+    console.log(`📊 Variation endpoint returned ${data.Items?.length || 0} products`);
+    
+    const matchingItems = data.Items || [];
     
     // Extract variations with size from CustomColumns (SIZE field)
     const variations = matchingItems.map(item => {

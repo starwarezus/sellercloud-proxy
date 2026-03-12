@@ -323,6 +323,8 @@ app.post('/api/get-variations', async (req, res) => {
             const detailData = await detailResponse.json();
             const productName = detailData.Items?.[0]?.ProductName || `${parentSKU} - ${variation.Size}`;
             
+            console.log(`  ✓ ${variation.ProductID}: ProductName = "${productName}"`);
+            
             return {
               ProductID: variation.ProductID,
               Size: variation.Size,
@@ -355,11 +357,11 @@ app.post('/api/get-variations', async (req, res) => {
 
     console.log(`✅ Found ${variations.length} variations for ${parentSKU}`);
     
-    // Log first few examples
+    // Log first few examples with full details
     if (variations.length > 0) {
       console.log('Sample variations:');
       variations.slice(0, 5).forEach(v => {
-        console.log(`  - ID: ${v.ProductID} | Size: ${v.Size}`);
+        console.log(`  - ID: ${v.ProductID} | Size: ${v.Size} | Name: ${v.ProductName}`);
       });
     }
 

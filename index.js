@@ -321,7 +321,8 @@ app.post('/api/get-variations', async (req, res) => {
           
           if (detailResponse.ok) {
             const detailData = await detailResponse.json();
-            const productName = detailData.Items?.[0]?.ProductName || `${parentSKU} - ${variation.Size}`;
+            const item = detailData.Items?.[0];
+            const productName = item?.ProductName || `${parentSKU} - ${variation.Size}`;
             
             console.log(`  ✓ ${variation.ProductID}: ProductName = "${productName}"`);
             
@@ -330,7 +331,9 @@ app.post('/api/get-variations', async (req, res) => {
               Size: variation.Size,
               ProductName: productName,
               SKU: variation.ProductID,
-              AvailableQty: variation.AvailableQty
+              AvailableQty: variation.AvailableQty,
+              eBayTopTitle: item?.eBayTopTitle || '',
+              ListPrice: item?.ListPrice || 0
             };
           } else {
             // Fallback if detail fetch fails
